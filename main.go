@@ -59,7 +59,7 @@ func convertExcelToJSON(excelFiles []string) {
 		// 检查文件夹是否存在，如果不存在则创建它
 		if err := os.MkdirAll(jsonDir, os.ModePerm); err != nil {
 			log.Printf("无法创建文件夹 %s: %v", jsonDir, err)
-			continue // 如果创建失败，跳过该文件
+			continue
 		}
 
 		// 生成输出文件名，去掉路径，替换扩展名
@@ -70,7 +70,7 @@ func convertExcelToJSON(excelFiles []string) {
 		f, err := excelize.OpenFile(excelFile)
 		if err != nil {
 			log.Printf("无法打开 Excel 文件 %s: %v", excelFile, err)
-			continue // 如果打开失败，跳过该文件
+			continue
 		}
 
 		// 获取第一个工作表名称
@@ -80,7 +80,7 @@ func convertExcelToJSON(excelFiles []string) {
 		rows, err := f.GetRows(sheetName)
 		if err != nil {
 			log.Printf("无法读取工作表 %s: %v", sheetName, err)
-			continue // 如果读取工作表失败，跳过该文件
+			continue
 		}
 
 		// 将数据转换为 JSON 格式
@@ -124,13 +124,13 @@ func convertExcelToJSON(excelFiles []string) {
 		jsonData, err := json.MarshalIndent(data, "", "  ")
 		if err != nil {
 			log.Printf("无法生成 JSON 数据: %v", err)
-			continue // 如果生成 JSON 数据失败，跳过该文件
+			continue
 		}
 
 		err = os.WriteFile(jsonFile, jsonData, 0644)
 		if err != nil {
 			log.Printf("无法写入 JSON 文件 %s: %v", jsonFile, err)
-			continue // 如果写入 JSON 文件失败，跳过该文件
+			continue
 		}
 
 		fmt.Printf("转换成功，输出文件: %s\n", jsonFile)
