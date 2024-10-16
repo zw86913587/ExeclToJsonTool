@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 func main() {
@@ -17,24 +18,43 @@ func main() {
 		return
 	}
 
-	// 遍历找到的每个 Excel 文件
-	convertExcelToJSON(excelFiles)
+	// 使用 WaitGroup 等待所有 goroutine 完成
+	var wg sync.WaitGroup
+	// 创建一个通道用于接收转换结果
+	resultChan := make(chan string)
+
+	// 启动一个 goroutine 来处理结果
+	go func() {
+		for result := range resultChan {
+			fmt.Println(result)
+		}
+	}()
+
+	// 遍历找到的每个 Excel 文件并启动 goroutine
+	for _, excelFile := range excelFiles {
+		wg.Add(1)
+		go func(file string) {
+			defer wg.Done()
+			convertExcelToJSON(file, resultChan)
+		}(excelFile)
+	}
+
+	// 等待所有 goroutine 完成
+	wg.Wait()
+	close(resultChan)
 }
 
 func findExcelFiles() ([]string, bool) {
-	// 获取当前目录
 	currentDir, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("无法获取当前目录: %v", err)
 	}
 
-	// 查找当前目录中的 Excel 文件
 	var excelFiles []string
 	err = filepath.Walk(currentDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		// 检查文件扩展名是否为 .xlsx 或 .xls
 		if !info.IsDir() && (filepath.Ext(info.Name()) == ".xlsx" || filepath.Ext(info.Name()) == ".xls") && strings.Index(info.Name(), "~") == -1 {
 			excelFiles = append(excelFiles, path)
 		}
@@ -52,87 +72,73 @@ func findExcelFiles() ([]string, bool) {
 	return excelFiles, false
 }
 
-func convertExcelToJSON(excelFiles []string) {
-	for _, excelFile := range excelFiles {
-		jsonDir := filepath.Join(filepath.Dir(excelFile), "json")
+func convertExcelToJSON(excelFile string, resultChan chan string) {
+	jsonDir := filepath.Join(filepath.Dir(excelFile), "json")
 
-		// 检查文件夹是否存在，如果不存在则创建它
-		if err := os.MkdirAll(jsonDir, os.ModePerm); err != nil {
-			log.Printf("无法创建文件夹 %s: %v", jsonDir, err)
-			continue
-		}
+	if err := os.MkdirAll(jsonDir, os.ModePerm); err != nil {
+		log.Printf("无法创建文件夹 %s: %v", jsonDir, err)
+		return
+	}
 
-		// 生成输出文件名，去掉路径，替换扩展名
-		fileName := filepath.Base(excelFile) // 获取文件名
-		jsonFile := filepath.Join(jsonDir, fileName[:len(fileName)-len(filepath.Ext(fileName))]+".json")
+	fileName := filepath.Base(excelFile)
+	jsonFile := filepath.Join(jsonDir, fileName[:len(fileName)-len(filepath.Ext(fileName))]+".json")
 
-		// 读取 Excel 文件
-		f, err := excelize.OpenFile(excelFile)
-		if err != nil {
-			log.Printf("无法打开 Excel 文件 %s: %v", excelFile, err)
-			continue
-		}
+	f, err := excelize.OpenFile(excelFile)
+	if err != nil {
+		log.Printf("无法打开 Excel 文件 %s: %v", excelFile, err)
+		return
+	}
 
-		// 获取第一个工作表名称
-		sheetName := f.GetSheetName(0)
+	sheetName := f.GetSheetName(0)
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		log.Printf("无法读取工作表 %s: %v", sheetName, err)
+		return
+	}
 
-		// 读取工作表数据
-		rows, err := f.GetRows(sheetName)
-		if err != nil {
-			log.Printf("无法读取工作表 %s: %v", sheetName, err)
-			continue
-		}
-
-		// 将数据转换为 JSON 格式
-		data := make(map[string]map[string]string)
-		if len(rows) > 0 {
-			// 处理表头
-			headers := rows[0]
-			for _, row := range rows[4:] {
-				entry := make(map[string]string)
-				ikey := "-1"
-				for i, cell := range row {
-					if i+1 > len(rows[3]) {
-						break // 跳过超出表头范围的行
-					}
-					if rows[3][i] != "3" {
-						continue // 跳过不显示的列
-					}
-					if i == 0 {
-						ikey = cell
-					}
-					// 尝试将单元格内容解析为浮点数
-					if value, err := strconv.ParseFloat(cell, 64); err == nil {
-						// 只有在值是小数的情况下才改变格式
-						if value != float64(int(value)) { // 判断是否为小数
-							entry[strings.ToLower(headers[i])] = fmt.Sprintf("%.4f", value) // 格式化为两位小数
-						} else {
-							entry[strings.ToLower(headers[i])] = cell // 保持整数原样
-						}
+	data := make(map[string]map[string]string)
+	if len(rows) > 0 {
+		headers := rows[0]
+		for _, row := range rows[4:] {
+			entry := make(map[string]string)
+			ikey := "-1"
+			for i, cell := range row {
+				if i+1 > len(rows[3]) {
+					break
+				}
+				if rows[3][i] != "3" {
+					continue
+				}
+				if i == 0 {
+					ikey = cell
+				}
+				if value, err := strconv.ParseFloat(cell, 64); err == nil {
+					if value != float64(int(value)) {
+						entry[strings.ToLower(headers[i])] = fmt.Sprintf("%.4f", value)
 					} else {
-						// 不是数值，直接使用字符串
 						entry[strings.ToLower(headers[i])] = cell
 					}
-				}
-				if ikey != "-1" || len(entry) > 0 {
-					data[ikey] = entry
+				} else {
+					entry[strings.ToLower(headers[i])] = cell
 				}
 			}
+			if ikey != "-1" || len(entry) > 0 {
+				data[ikey] = entry
+			}
 		}
-
-		// 将数据写入 JSON 文件
-		jsonData, err := json.MarshalIndent(data, "", "  ")
-		if err != nil {
-			log.Printf("无法生成 JSON 数据: %v", err)
-			continue
-		}
-
-		err = os.WriteFile(jsonFile, jsonData, 0644)
-		if err != nil {
-			log.Printf("无法写入 JSON 文件 %s: %v", jsonFile, err)
-			continue
-		}
-
-		fmt.Printf("转换成功，输出文件: %s\n", jsonFile)
 	}
+
+	jsonData, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		log.Printf("无法生成 JSON 数据: %v", err)
+		return
+	}
+
+	err = os.WriteFile(jsonFile, jsonData, 0644)
+	if err != nil {
+		log.Printf("无法写入 JSON 文件 %s: %v", jsonFile, err)
+		return
+	}
+
+	resultChan <- fmt.Sprintf("转换成功，输出文件: %s", jsonFile)
 }
