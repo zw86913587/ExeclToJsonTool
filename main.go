@@ -42,17 +42,23 @@ func main() {
 	// 等待所有 goroutine 完成
 	wg.Wait()
 	close(resultChan)
+	fmt.Println("按回车键继续...")
+	_, _ = fmt.Scanln() // 暂停程序，等待用户按回车键
 }
 
 func findExcelFiles() ([]string, bool) {
 	currentDir, err := os.Getwd()
 	if err != nil {
+		fmt.Println("按回车键继续...")
+		_, _ = fmt.Scanln() // 暂停程序，等待用户按回车键
 		log.Fatalf("无法获取当前目录: %v", err)
 	}
 
 	var excelFiles []string
 	err = filepath.Walk(currentDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			fmt.Println("按回车键继续...")
+			_, _ = fmt.Scanln() // 暂停程序，等待用户按回车键
 			return err
 		}
 		if !info.IsDir() && (filepath.Ext(info.Name()) == ".xlsx" || filepath.Ext(info.Name()) == ".xls") && strings.Index(info.Name(), "~") == -1 {
@@ -62,10 +68,14 @@ func findExcelFiles() ([]string, bool) {
 	})
 
 	if err != nil {
+		fmt.Println("按回车键继续...")
+		_, _ = fmt.Scanln() // 暂停程序，等待用户按回车键
 		log.Fatalf("遍历目录时出错: %v", err)
 	}
 
 	if len(excelFiles) == 0 {
+		fmt.Println("按回车键继续...")
+		_, _ = fmt.Scanln() // 暂停程序，等待用户按回车键
 		fmt.Println("当前目录中未找到任何 Excel 文件 (.xlsx 或 .xls)")
 		return nil, true
 	}
@@ -76,6 +86,8 @@ func convertExcelToJSON(excelFile string, resultChan chan string) {
 	jsonDir := filepath.Join(filepath.Dir(excelFile), "json")
 
 	if err := os.MkdirAll(jsonDir, os.ModePerm); err != nil {
+		fmt.Println("按回车键继续...")
+		_, _ = fmt.Scanln() // 暂停程序，等待用户按回车键
 		log.Printf("无法创建文件夹 %s: %v", jsonDir, err)
 		return
 	}
@@ -85,6 +97,8 @@ func convertExcelToJSON(excelFile string, resultChan chan string) {
 
 	f, err := excelize.OpenFile(excelFile)
 	if err != nil {
+		fmt.Println("按回车键继续...")
+		_, _ = fmt.Scanln() // 暂停程序，等待用户按回车键
 		log.Printf("无法打开 Excel 文件 %s: %v", excelFile, err)
 		return
 	}
@@ -92,6 +106,8 @@ func convertExcelToJSON(excelFile string, resultChan chan string) {
 	sheetName := f.GetSheetName(0)
 	rows, err := f.GetRows(sheetName)
 	if err != nil {
+		fmt.Println("按回车键继续...")
+		_, _ = fmt.Scanln() // 暂停程序，等待用户按回车键
 		log.Printf("无法读取工作表 %s: %v", sheetName, err)
 		return
 	}
@@ -102,6 +118,22 @@ func convertExcelToJSON(excelFile string, resultChan chan string) {
 		for _, row := range rows[4:] {
 			entry := make(map[string]string)
 			ikey := "-1"
+			//判断有多少个列需要转换
+			m := len(rows[3])
+			//for k := range rows[3] {
+			//	if rows[3][k] == "3" {
+			//		m++
+			//	}
+			//}
+			//补全空白格子
+			if m > len(row) {
+				j := 0
+				n := m - len(row)
+				for j <= n {
+					row = append(row, "")
+					j++
+				}
+			}
 			for i, cell := range row {
 				if i+1 > len(rows[3]) {
 					break
@@ -131,12 +163,16 @@ func convertExcelToJSON(excelFile string, resultChan chan string) {
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		log.Printf("无法生成 JSON 数据: %v", err)
+		fmt.Println("按回车键继续...")
+		_, _ = fmt.Scanln() // 暂停程序，等待用户按回车键
 		return
 	}
 
 	err = os.WriteFile(jsonFile, jsonData, 0644)
 	if err != nil {
 		log.Printf("无法写入 JSON 文件 %s: %v", jsonFile, err)
+		fmt.Println("按回车键继续...")
+		_, _ = fmt.Scanln() // 暂停程序，等待用户按回车键
 		return
 	}
 
