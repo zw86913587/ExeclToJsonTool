@@ -1,15 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/xuri/excelize/v2"
 	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/xuri/excelize/v2"
 )
 
 func main() {
@@ -167,6 +169,9 @@ func convertExcelToJSON(excelFile string) error {
 
 			processedCols++
 
+			// 将字面的 \n 替换为真正的换行符
+			cell = strings.ReplaceAll(cell, "\\n", "\n")
+
 			// 确保表头存在
 			if colIndex >= len(headers) {
 				continue
@@ -201,10 +206,14 @@ func convertExcelToJSON(excelFile string) error {
 
 	fmt.Printf("总共处理了 %d 条数据记录\n", len(data))
 
-	jsonData, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(data); err != nil {
 		return fmt.Errorf("无法生成 JSON 数据: %v", err)
 	}
+	jsonData := buf.Bytes()
 
 	if err = os.WriteFile(jsonFile, jsonData, 0644); err != nil {
 		return fmt.Errorf("无法写入 JSON 文件 %s: %v", jsonFile, err)
